@@ -55,6 +55,11 @@ class TableAPI final : public BaseAPI
             auto &fb_result = std::get<flatbuffers::FlatBufferBuilder>(response);
             MakeResponse(tables, candidates, fallback_speed_cells, fb_result);
         }
+        else if(std::holds_alternative<util::result_proxy::ResultProxy*>(response))
+        {
+            auto result_proxy = std::get<util::result_proxy::ResultProxy*>(response);
+            MakeResponse(tables, candidates, fallback_speed_cells, result_proxy);
+        }
         else
         {
             auto &json_result = std::get<util::json::Object>(response);
@@ -234,6 +239,85 @@ class TableAPI final : public BaseAPI
         if (!data_timestamp.empty())
         {
             response.values.emplace("data_version", data_timestamp);
+        }
+    }
+
+    virtual void
+    MakeResponse(const std::pair<std::vector<EdgeDuration>, std::vector<EdgeDistance>> &tables,
+                 const std::vector<PhantomNodeCandidates> &candidates,
+                 const std::vector<TableCellRef> &fallback_speed_cells,
+                 util::result_proxy::ResultProxy *response) const
+    {
+        auto number_of_sources = parameters.sources.size();
+        auto number_of_destinations = parameters.destinations.size();
+
+        // symmetric case
+        if (parameters.sources.empty())
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("sources", MakeWaypoints(candidates));
+                response->Error("ResultProxySkipWaypoints", "ResultProxy does not support waypoints, use skip_waypoints=true");
+                return;
+            }
+            number_of_sources = candidates.size();
+        }
+        else
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("sources", MakeWaypoints(candidates, parameters.sources));
+                response->Error("ResultProxySkipWaypoints", "ResultProxy does not support waypoints, use skip_waypoints=true");
+            }
+        }
+
+        if (parameters.destinations.empty())
+        {
+            if (!parameters.skip_waypoints)
+            {
+                response->Error("ResultProxySkipWaypoints", "ResultProxy does not support waypoints, use skip_waypoints=true");
+                //response.values.emplace("destinations", MakeWaypoints(candidates));
+            }
+            number_of_destinations = candidates.size();
+        }
+        else
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("destinations",
+                //                        MakeWaypoints(candidates, parameters.destinations));
+                response->Error("ResultProxySkipWaypoints", "ResultProxy does not support waypoints, use skip_waypoints=true");
+            }
+        }
+
+        switch(parameters.annotations)
+        {
+            case TableParameters::AnnotationsType::All:
+                MakeCombinedTable(tables, number_of_sources, number_of_destinations, response);
+            break;
+            case TableParameters::AnnotationsType::Duration:
+                MakeDurationTable(tables.first, number_of_sources, number_of_destinations, response);
+            break;
+            case TableParameters::AnnotationsType::Distance:
+                MakeDistanceTable(tables.second, number_of_sources, number_of_destinations, response);
+            break;
+            default:
+                ; // no annotations
+        }
+
+        if (parameters.fallback_speed != from_alias<double>(INVALID_FALLBACK_SPEED) &&
+            parameters.fallback_speed > 0)
+        {
+            /*response.values.emplace("fallback_speed_cells",
+                                    MakeEstimatesTable(fallback_speed_cells));*/
+            response->NoOp(fallback_speed_cells.size()); // to get rid of unused varialbe error
+            response->Error("ResultProxyNoFallbackSpeedWarning", "Warning: ResultProxy does not support fallback_speed;");
+        }
+
+        auto data_timestamp = facade.GetTimestamp();
+        if (!data_timestamp.empty())
+        {
+            response->DataVersion(data_timestamp);
         }
     }
 
@@ -432,6 +516,76 @@ class TableAPI final : public BaseAPI
                 json_table.values.push_back(util::json::Value{row});
             });
         return json_table;
+    }
+
+    virtual void MakeCombinedTable(
+        const std::pair<std::vector<EdgeDuration>, std::vector<EdgeDistance>> &tables,
+        std::size_t number_of_rows,
+        std::size_t number_of_columns,
+        util::result_proxy::ResultProxy *response) const
+    {
+        auto & duration_table = tables.first;
+        auto & distance_table = tables.second;
+        for (size_t row = 0; row < number_of_rows; row++)
+        {
+            for (size_t col = 0; col < number_of_columns; col++)
+            {
+                size_t lindex = row * number_of_columns + col;
+                auto duration{duration_table[lindex]};
+                // division by 10 because the duration is in deciseconds (10s)
+                float dt = duration == MAXIMAL_EDGE_DURATION ? 
+                    NAN : from_alias<float>(duration) / 10.f;
+
+                auto distance{distance_table[lindex]};
+                // round to single decimal place
+                float ds = distance == INVALID_EDGE_DISTANCE ? 
+                    NAN : std::roundf(from_alias<float>(distance)*10.f) / 10.f;
+
+                response->SetDistanceDuration(row, col, ds, dt);
+            }
+        }
+    }
+
+    virtual void MakeDurationTable(
+        const std::vector<EdgeDuration> &duration_table,
+        std::size_t number_of_rows,
+        std::size_t number_of_columns,
+        util::result_proxy::ResultProxy *response) const
+    {
+        for (size_t row = 0; row < number_of_rows; row++)
+        {
+            for (size_t col = 0; col < number_of_columns; col++)
+            {
+                size_t lindex = row * number_of_columns + col;
+                auto duration{duration_table[lindex]};
+                // division by 10 because the duration is in deciseconds (10s)
+                float dt = duration == MAXIMAL_EDGE_DURATION ? 
+                    NAN : from_alias<float>(duration) / 10.f;
+
+                response->SetDuration(row, col, dt);
+            }
+        }
+    }
+
+    virtual void MakeDistanceTable(
+        const std::vector<EdgeDistance> &distance_table,
+        std::size_t number_of_rows,
+        std::size_t number_of_columns,
+        util::result_proxy::ResultProxy *response) const
+    {
+        for (size_t row = 0; row < number_of_rows; row++)
+        {
+            for (size_t col = 0; col < number_of_columns; col++)
+            {
+                size_t lindex = row * number_of_columns + col;
+                auto distance{distance_table[lindex]};
+                // round to single decimal place
+                float ds = distance == INVALID_EDGE_DISTANCE ? 
+                    NAN : std::roundf(from_alias<float>(distance)*10.f) / 10.f;
+
+                response->SetDistance(row, col, ds);
+            }
+        }
     }
 
     const TableParameters &parameters;

@@ -7,10 +7,11 @@
 #include <string>
 
 #include "util/json_container.hpp"
+#include "util/result_proxy.hpp"
 
 namespace osrm::engine::api
 {
-using ResultT = std::variant<util::json::Object, std::string, flatbuffers::FlatBufferBuilder>;
+using ResultT = std::variant<util::json::Object, std::string, flatbuffers::FlatBufferBuilder, util::result_proxy::ResultProxy*>;
 } // namespace osrm::engine::api
 
 #endif

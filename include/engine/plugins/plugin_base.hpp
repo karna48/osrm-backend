@@ -89,6 +89,9 @@ class BasePlugin
         {
             str_result = str(boost::format("code=%1% message=%2%") % code % message);
         };
+        void operator()(util::result_proxy::ResultProxy* result_proxy) {
+            result_proxy->Error(code, message);
+        }
     };
 
     Status Error(const std::string &code,
