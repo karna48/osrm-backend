@@ -117,6 +117,9 @@ cmake --build .
 sudo cmake --build . --target install
 ```
 
+On some systems (newer GCC) it might be necessary to use
+```cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wno-array-bounds -Wno-uninitialized"```
+
 ### Request Against the Demo Server
 
 Read the [API usage policy](https://github.com/Project-OSRM/osrm-backend/wiki/Demo-server).
