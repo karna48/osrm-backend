@@ -2,7 +2,7 @@
 #ifndef OSMR_UTIL_RESULT_PROXY_HPP
 #define OSMR_UTIL_RESULT_PROXY_HPP
 
-#include "util/typedefs.hpp"
+#include <string>
 
 namespace osrm::util::result_proxy
 {
