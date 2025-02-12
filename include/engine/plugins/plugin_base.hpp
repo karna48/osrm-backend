@@ -89,8 +89,11 @@ class BasePlugin
         {
             str_result = str(boost::format("code=%1% message=%2%") % code % message);
         };
-        void operator()(util::result_proxy::ResultProxy* result_proxy) {
-            result_proxy->Error(code, message);
+        void operator()(util::result_proxy::ResultProxyPtr result_proxy_ptr) {
+            result_proxy_ptr.ptr->Error(code, message);
+        }
+        void operator()(util::result_proxy::ResultProxyTablePtr result_proxy_table_ptr) {
+            result_proxy_table_ptr.ptr->Error(code, message);
         }
     };
 

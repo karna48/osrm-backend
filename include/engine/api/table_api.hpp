@@ -55,10 +55,15 @@ class TableAPI final : public BaseAPI
             auto &fb_result = std::get<flatbuffers::FlatBufferBuilder>(response);
             MakeResponse(tables, candidates, fallback_speed_cells, fb_result);
         }
-        else if(std::holds_alternative<util::result_proxy::ResultProxy*>(response))
+        else if(std::holds_alternative<util::result_proxy::ResultProxyTablePtr>(response))
         {
-            auto result_proxy = std::get<util::result_proxy::ResultProxy*>(response);
-            MakeResponse(tables, candidates, fallback_speed_cells, result_proxy);
+            auto result_proxy_table = std::get<util::result_proxy::ResultProxyTablePtr>(response);
+            MakeResponse(tables, candidates, fallback_speed_cells, result_proxy_table.ptr);
+        }
+        else if(std::holds_alternative<util::result_proxy::ResultProxyPtr>(response))
+        {
+            auto result_proxy = std::get<util::result_proxy::ResultProxyPtr>(response);
+            MakeResponse(tables, candidates, fallback_speed_cells, result_proxy.ptr);
         }
         else
         {
@@ -320,6 +325,84 @@ class TableAPI final : public BaseAPI
             response->DataVersion(data_timestamp);
         }
     }
+
+    virtual void
+    MakeResponse(const std::pair<std::vector<EdgeDuration>, std::vector<EdgeDistance>> &tables,
+                 const std::vector<PhantomNodeCandidates> &candidates,
+                 const std::vector<TableCellRef> &fallback_speed_cells,
+                 util::result_proxy::ResultProxyTable *response) const
+    {
+        auto number_of_sources = parameters.sources.size();
+        auto number_of_destinations = parameters.destinations.size();
+
+        // symmetric case
+        if (parameters.sources.empty())
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("sources", MakeWaypoints(candidates));
+                response->Error("ResultProxyTableSkipWaypoints", "ResultProxyTable does not support waypoints, use skip_waypoints=true");
+                return;
+            }
+            number_of_sources = candidates.size();
+        }
+        else
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("sources", MakeWaypoints(candidates, parameters.sources));
+                response->Error("ResultProxyTableSkipWaypoints", "ResultProxyTable does not support waypoints, use skip_waypoints=true");
+            }
+        }
+
+        if (parameters.destinations.empty())
+        {
+            if (!parameters.skip_waypoints)
+            {
+                response->Error("ResultProxyTableSkipWaypoints", "ResultProxyTable does not support waypoints, use skip_waypoints=true");
+                //response.values.emplace("destinations", MakeWaypoints(candidates));
+            }
+            number_of_destinations = candidates.size();
+        }
+        else
+        {
+            if (!parameters.skip_waypoints)
+            {
+                //response.values.emplace("destinations",
+                //                        MakeWaypoints(candidates, parameters.destinations));
+                response->Error("ResultProxyTableSkipWaypoints", "ResultProxyTable does not support waypoints, use skip_waypoints=true");
+            }
+        }
+
+        switch(parameters.annotations)
+        {
+            case TableParameters::AnnotationsType::All:
+                response->Table(tables, number_of_sources, number_of_destinations);
+            break;
+            case TableParameters::AnnotationsType::Duration:
+            case TableParameters::AnnotationsType::Distance:
+                response->Error("ResultProxyTableAnnotationsAll", "ResultProxyTable supports only TableParameters::AnnotationsType::All");
+            break;
+            default:
+                ; // no annotations
+        }
+
+        if (parameters.fallback_speed != from_alias<double>(INVALID_FALLBACK_SPEED) &&
+            parameters.fallback_speed > 0)
+        {
+            /*response.values.emplace("fallback_speed_cells",
+                                    MakeEstimatesTable(fallback_speed_cells));*/
+            response->NoOp(fallback_speed_cells.size()); // to get rid of unused variable (parameter) error
+            response->Error("ResultProxyNoFallbackSpeedWarning", "Warning: ResultProxy does not support fallback_speed;");
+        }
+
+        auto data_timestamp = facade.GetTimestamp();
+        if (!data_timestamp.empty())
+        {
+            response->DataVersion(data_timestamp);
+        }
+    }
+
 
   protected:
     virtual flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<fbresult::Waypoint>>>

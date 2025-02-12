@@ -11,7 +11,8 @@
 
 namespace osrm::engine::api
 {
-using ResultT = std::variant<util::json::Object, std::string, flatbuffers::FlatBufferBuilder, util::result_proxy::ResultProxy*>;
+using ResultT = std::variant<util::json::Object, std::string, flatbuffers::FlatBufferBuilder, 
+    util::result_proxy::ResultProxyPtr, util::result_proxy::ResultProxyTablePtr>;
 } // namespace osrm::engine::api
 
 #endif
